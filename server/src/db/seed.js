@@ -12,6 +12,15 @@ function reset() {
   }
 }
 
+export function seedIfEmpty() {
+  const n = db.prepare("SELECT COUNT(*) c FROM products").get().c;
+  if (n > 0) return false;
+  doSeed();
+  return true;
+}
+
+function doSeed() {
+
 reset();
 
 // --- Creator ---
@@ -114,3 +123,10 @@ for (const [k, v] of Object.entries(settings)) insS.run(k, v);
 const n = db.prepare("SELECT COUNT(*) c FROM products").get().c;
 const v = db.prepare("SELECT COUNT(*) c FROM variants").get().c;
 console.log(`seeded ${n} products, ${v} variants (demo content)`);
+} // end doSeed
+
+// Direct run: wipe + reseed (deliberate reset only).
+if (process.argv[1] && process.argv[1].endsWith("seed.js")) {
+  reset();
+  doSeed();
+}

@@ -2,6 +2,7 @@
 import express from "express";
 import path from "node:path";
 import { db } from "./db/database.js";
+import { seedIfEmpty } from "./db/seed.js";
 import { shop } from "./routes/shop.js";
 import { checkout } from "./routes/checkout.js";
 import { customer } from "./routes/customer.js";
@@ -36,15 +37,11 @@ app.get("*", (req, res, next) => {
 });
 
 // Auto-seed the demo catalog on first boot when the database is empty
-// (fresh deploy: Render disk starts empty). The seed content is marked
-// demo=1 everywhere; set SEED_DEMO_DATA=0 to disable.
+// (fresh deploy: Render's ephemeral filesystem starts empty). The seed
+// content is marked demo=1 everywhere; set SEED_DEMO_DATA=0 to disable.
 if (process.env.SEED_DEMO_DATA !== "0") {
   try {
-    const n = db.prepare("SELECT COUNT(*) c FROM products").get().c;
-    if (n === 0) {
-      console.log("catalog empty on boot — seeding demo data (SEED_DEMO_DATA=0 to disable)");
-      await import("./db/seed.js");
-    }
+    if (seedIfEmpty()) console.log("catalog empty on boot — seeded demo catalog (SEED_DEMO_DATA=0 to disable)");
   } catch (e) { console.warn("boot seed skipped:", e.message); }
 }
 
