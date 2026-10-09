@@ -6,25 +6,25 @@ import { db } from "./database.js";
 const now = new Date().toISOString();
 const uid = (p) => `${p}-${Math.random().toString(36).slice(2, 10)}`;
 
-function reset() {
+async function reset() {
   for (const t of ["order_items", "orders", "variants", "products", "collections", "creators", "discount_codes"]) {
-    db.exec(`DELETE FROM "${t}"`);
+    await db.exec(`DELETE FROM "${t}"`);
   }
 }
 
-export function seedIfEmpty() {
-  const n = db.prepare("SELECT COUNT(*) c FROM products").get().c;
-  if (n > 0) return false;
-  doSeed();
+export async function seedIfEmpty() {
+  const n = (await db.prepare("SELECT COUNT(*) c FROM products").get()).c;
+  if (parseInt(n, 10) > 0) return false;
+  await doSeed();
   return true;
 }
 
-function doSeed() {
+async function doSeed() {
 
-reset();
+await reset();
 
 // --- Creator ---
-db.prepare(
+await db.prepare(
   `INSERT INTO creators (id, name, bio, avatar_seed, website, twitter, instagram)
    VALUES (?, ?, ?, ?, ?, ?, ?)`
 ).run(
@@ -44,7 +44,7 @@ const collections = [
   { id: "paper-moons", title: "Paper Moons", slug: "paper-moons", description: "Cool moonlight studies in blue and silver.", sort: 2 },
 ];
 for (const c of collections) {
-  db.prepare(
+  await db.prepare(
     `INSERT INTO collections (id, title, slug, description, creator_id, sort_order) VALUES (?, ?, ?, ?, 'aoki', ?)`
   ).run(c.id, c.title, c.slug, c.description, c.sort);
 }
@@ -82,31 +82,32 @@ const insV = db.prepare(
    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 );
 
-P.forEach((p, i) => {
+for (let i = 0; i < P.length; i++) {
+  const p = P[i];
   const pid = uid("p");
   const status = p.coming ? "coming_soon" : "active";
-  insP.run(
+  await insP.run(
     pid, p.slug, p.title, p.col, p.desc, p.specs, p.seed, p.pal,
     status, p.featured ? 1 : 0, p.sale ? 1 : 0,
     new Date(Date.now() - i * 86400000).toISOString()
   );
-  const mk = (name, sku, price, compare, stock, order) =>
-    insV.run(uid("v"), pid, name, sku, price, compare ?? null, stock, order);
+  const mk = async (name, sku, price, compare, stock, order) =>
+    await insV.run(uid("v"), pid, name, sku, price, compare ?? null, stock, order);
   if (p.kind === "print") {
-    mk('5x7 Print', `${p.slug}-5x7`, 1500, null, p.lowstock ? 3 : 24, 0);
-    mk('8x10 Print', `${p.slug}-8x10`, 2000, null, 18, 1);
-    mk('11x14 Print', `${p.slug}-11x14`, 2500, null, p.lowstock ? 0 : 12, 2);
+    await mk('5x7 Print', `${p.slug}-5x7`, 1500, null, p.lowstock ? 3 : 24, 0);
+    await mk('8x10 Print', `${p.slug}-8x10`, 2000, null, 18, 1);
+    await mk('11x14 Print', `${p.slug}-11x14`, 2500, null, p.lowstock ? 0 : 12, 2);
   } else if (p.kind === "sticker") {
-    mk('3.5" Sticker', `${p.slug}-sticker`, 500, null, p.outofstock ? 0 : 60, 0);
+    await mk('3.5" Sticker', `${p.slug}-sticker`, 500, null, p.outofstock ? 0 : 60, 0);
   } else if (p.kind === "poster") {
-    mk('18x24 Poster', `${p.slug}-poster`, p.sale[0], p.sale[1], 15, 0);
+    await mk('18x24 Poster', `${p.slug}-poster`, p.sale[0], p.sale[1], 15, 0);
   } else if (p.kind === "bundle") {
-    mk('Set of 3 (8x10)', `${p.slug}-bundle`, p.sale[0], p.sale[1], 10, 0);
+    await mk('Set of 3 (8x10)', `${p.slug}-bundle`, p.sale[0], p.sale[1], 10, 0);
   }
-});
+}
 
 // Discount code + settings
-db.prepare("INSERT OR REPLACE INTO discount_codes (code, percent_off, active) VALUES ('WELCOME10', 10, 1)").run();
+await db.prepare("INSERT INTO discount_codes (code, percent_off, active) VALUES ('WELCOME10', 10, 1) ON CONFLICT (code) DO UPDATE SET percent_off = EXCLUDED.percent_off, active = EXCLUDED.active").run();
 const settings = {
   store_name: "Nocturne Prints",
   store_tagline: "Art prints for the night hours",
@@ -117,16 +118,16 @@ const settings = {
   shipping_flat_cents: "500",
   free_shipping_over_cents: "5000",
 };
-const insS = db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)");
-for (const [k, v] of Object.entries(settings)) insS.run(k, v);
+const insS = db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value");
+for (const [k, v] of Object.entries(settings)) await insS.run(k, v);
 
-const n = db.prepare("SELECT COUNT(*) c FROM products").get().c;
-const v = db.prepare("SELECT COUNT(*) c FROM variants").get().c;
+const n = (await db.prepare("SELECT COUNT(*) c FROM products").get()).c;
+const v = (await db.prepare("SELECT COUNT(*) c FROM variants").get()).c;
 console.log(`seeded ${n} products, ${v} variants (demo content)`);
 } // end doSeed
 
 // Direct run: wipe + reseed (deliberate reset only).
 if (process.argv[1] && process.argv[1].endsWith("seed.js")) {
-  reset();
-  doSeed();
+  await reset();
+  await doSeed();
 }

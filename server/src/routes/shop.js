@@ -6,10 +6,10 @@ export const shop = Router();
 
 const money = (c) => (c == null ? null : c / 100);
 
-function productWithVariants(row) {
-  const variants = db
+async function productWithVariants(row) {
+  const variants = (await db
     .prepare("SELECT id, name, sku, price_cents, compare_at_cents, stock FROM variants WHERE product_id = ? ORDER BY sort_order")
-    .all(row.id)
+    .all(row.id))
     .map((v) => ({ ...v, price: money(v.price_cents), compareAt: money(v.compare_at_cents) }));
   const prices = variants.map((v) => v.price_cents);
   const min = Math.min(...prices);
@@ -45,36 +45,38 @@ const BASE = `
   JOIN creators c ON c.id = p.creator_id
   LEFT JOIN collections col ON col.id = p.collection_id`;
 
-shop.get("/creators/:id", (req, res) => {
-  const row = db.prepare("SELECT * FROM creators WHERE id = ?").get(req.params.id);
+shop.get("/creators/:id", async (req, res) => {
+  const row = await db.prepare("SELECT * FROM creators WHERE id = ?").get(req.params.id);
   if (!row) return res.status(404).json({ error: "NOT_FOUND" });
   res.json({ id: row.id, name: row.name, bio: row.bio, avatarSeed: row.avatar_seed, website: row.website, twitter: row.twitter, instagram: row.instagram });
 });
 
-shop.get("/collections", (req, res) => {
-  const rows = db.prepare("SELECT * FROM collections ORDER BY sort_order").all();
-  const withCounts = rows.map((c) => ({
+shop.get("/collections", async (req, res) => {
+  const rows = await db.prepare("SELECT * FROM collections ORDER BY sort_order").all();
+  const withCounts = await Promise.all(rows.map(async (c) => ({
     ...c,
-    productCount: db.prepare("SELECT COUNT(*) n FROM products WHERE collection_id = ? AND status = 'active'").get(c.id).n,
-  }));
+    productCount: (await db.prepare("SELECT COUNT(*) n FROM products WHERE collection_id = ? AND status = 'active'").get(c.id)).n,
+  })));
   res.json(withCounts);
 });
 
-shop.get("/collections/:slug", (req, res) => {
-  const c = db.prepare("SELECT * FROM collections WHERE slug = ?").get(req.params.slug);
+shop.get("/collections/:slug", async (req, res) => {
+  const c = await db.prepare("SELECT * FROM collections WHERE slug = ?").get(req.params.slug);
   if (!c) return res.status(404).json({ error: "NOT_FOUND" });
-  const creator = db.prepare("SELECT * FROM creators WHERE id = ?").get(c.creator_id);
+  const creator = await db.prepare("SELECT * FROM creators WHERE id = ?").get(c.creator_id);
   res.json({ ...c, creator: { id: creator.id, name: creator.name, bio: creator.bio, avatarSeed: creator.avatar_seed, twitter: creator.twitter, instagram: creator.instagram } });
 });
 
 // GET /api/products?collection=&q=&sort=&availability=&page=&perPage=
-shop.get("/products", (req, res) => {
+shop.get("/products", async (req, res) => {
   const { collection, q, sort = "featured", availability = "all", page = "1", perPage = "12" } = req.query;
   const where = ["p.status != 'archived'"];
   const params = [];
   if (collection) { where.push("col.slug = ?"); params.push(collection); }
   if (q) { where.push("(p.title LIKE ? OR p.description LIKE ?)"); params.push(`%${q}%`, `%${q}%`); }
-  let rows = db.prepare(`${BASE} WHERE ${where.join(" AND ")}`).all(...params).map(productWithVariants);
+  let rows = await Promise.all(
+    (await db.prepare(`${BASE} WHERE ${where.join(" AND ")}`).all(...params)).map(productWithVariants)
+  );
   if (availability === "in_stock") rows = rows.filter((r) => r.inStock && r.status === "active");
   else if (availability === "on_sale") rows = rows.filter((r) => r.isSale);
   else if (availability === "coming_soon") rows = rows.filter((r) => r.status === "coming_soon");
@@ -95,17 +97,19 @@ shop.get("/products", (req, res) => {
   res.json({ total, page: pg, perPage: pp, pages: Math.ceil(total / pp), items: rows.slice((pg - 1) * pp, pg * pp) });
 });
 
-shop.get("/products/:slug", (req, res) => {
-  const row = db.prepare(`${BASE} WHERE p.slug = ?`).get(req.params.slug);
+shop.get("/products/:slug", async (req, res) => {
+  const row = await db.prepare(`${BASE} WHERE p.slug = ?`).get(req.params.slug);
   if (!row || row.status === "archived") return res.status(404).json({ error: "NOT_FOUND" });
-  const product = productWithVariants(row);
-  const related = db.prepare(`${BASE} WHERE p.collection_id = ? AND p.id != ? AND p.status = 'active' LIMIT 4`)
-    .all(row.collection_id, row.id).map(productWithVariants);
+  const product = await productWithVariants(row);
+  const related = await Promise.all(
+    (await db.prepare(`${BASE} WHERE p.collection_id = ? AND p.id != ? AND p.status = 'active' LIMIT 4`)
+      .all(row.collection_id, row.id)).map(productWithVariants)
+  );
   res.json({ ...product, related });
 });
 
-shop.get("/settings", (req, res) => {
-  const rows = db.prepare("SELECT key, value FROM settings").all();
+shop.get("/settings", async (req, res) => {
+  const rows = await db.prepare("SELECT key, value FROM settings").all();
   const out = {};
   for (const r of rows) out[r.key] = r.value;
   res.json({

@@ -36,7 +36,8 @@ cd ../server && npm install && npm start   # serves web/dist + API on PORT
 |---|---|---|
 | `ADMIN_PASSWORD` | yes | Password for the `/admin` panel. Never commit a real value. |
 | `PORT` | no | API port (default 4000; hosts like Render inject their own). |
-| `DB_PATH` | no | SQLite file location (default `./data/nocturne.db`). |
+| `DB_PATH` | no | SQLite file location for local dev (default `./data/nocturne.db`). Ignored when `DATABASE_URL` is set. |
+| `DATABASE_URL` | no | PostgreSQL connection string. When set, the server uses PostgreSQL (persistent); otherwise local SQLite. Render injects this automatically from the `render.yaml` database. |
 | `ALLOWED_ORIGIN` | no | CORS origin. Leave unset for local dev; set to your frontend origin in production if split. |
 
 `server/.env.example` documents these with no real secrets.
@@ -78,17 +79,14 @@ cd ../server && npm install && npm start   # serves web/dist + API on PORT
 ## Deployment (Render, free tier)
 
 1. Push this repo to GitHub.
-2. Create a **Web Service**: build command
-   `cd web && npm install && npm run build && cd ../server && npm install`,
-   start command `cd server && npm start`.
-3. Environment: set `ADMIN_PASSWORD` (generate a strong value). Add a persistent
-   disk mounted at `/opt/render/project/src/server/data` and set
-   `DB_PATH=/opt/render/project/src/server/data/nocturne.db` so the SQLite
-   database survives restarts (without a disk, Render's ephemeral filesystem
-   wipes orders/products on every deploy — settings seed on boot only if empty).
-4. Run the seed once after first deploy:
-   `cd server && npm run seed` (via Render shell). Re-running is idempotent-ish
-   (it wipes and re-seeds — back up first in production).
+2. Render Dashboard → **New → Blueprint** → connect the repo. `render.yaml`
+   provisions a free web service **and** a free PostgreSQL database
+   (`nocturne-db`); the service gets `DATABASE_URL` automatically.
+3. Environment: `ADMIN_PASSWORD` is auto-generated — copy it from the
+   service's Environment tab for `/admin` access.
+4. The server creates the schema and auto-seeds the demo catalog on first
+   boot when the database is empty — no shell commands needed. Orders,
+   products and customers now persist across deploys via PostgreSQL.
 5. Set `ALLOWED_ORIGIN` if you split frontend/backend hosting.
 
 `render.yaml` in the repo root encodes the above as a blueprint.

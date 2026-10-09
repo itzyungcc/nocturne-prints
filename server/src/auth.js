@@ -32,46 +32,46 @@ export function verifyAdminPassword(password) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-export function createAdminSession() {
+export async function createAdminSession() {
   const token = newToken();
   const now = new Date();
   const exp = new Date(now.getTime() + SESSION_TTL_MS);
-  db.prepare(
+  await db.prepare(
     "INSERT INTO admin_sessions (token, created_at, expires_at) VALUES (?, ?, ?)"
   ).run(token, now.toISOString(), exp.toISOString());
   return token;
 }
 
-export function validAdminSession(token) {
+export async function validAdminSession(token) {
   if (!token) return false;
-  const row = db.prepare("SELECT * FROM admin_sessions WHERE token = ?").get(token);
+  const row = await db.prepare("SELECT * FROM admin_sessions WHERE token = ?").get(token);
   if (!row) return false;
   if (Date.parse(row.expires_at) < Date.now()) {
-    db.prepare("DELETE FROM admin_sessions WHERE token = ?").run(token);
+    await db.prepare("DELETE FROM admin_sessions WHERE token = ?").run(token);
     return false;
   }
   return true;
 }
 
-export function destroyAdminSession(token) {
-  db.prepare("DELETE FROM admin_sessions WHERE token = ?").run(token);
+export async function destroyAdminSession(token) {
+  await db.prepare("DELETE FROM admin_sessions WHERE token = ?").run(token);
 }
 
-export function createCustomerSession(customerId) {
+export async function createCustomerSession(customerId) {
   const token = newToken();
   const now = new Date();
   const exp = new Date(now.getTime() + SESSION_TTL_MS);
-  db.prepare(
+  await db.prepare(
     "INSERT INTO customer_sessions (token, customer_id, created_at, expires_at) VALUES (?, ?, ?, ?)"
   ).run(token, customerId, now.toISOString(), exp.toISOString());
   return token;
 }
 
-export function customerFromSession(token) {
+export async function customerFromSession(token) {
   if (!token) return null;
-  const row = db.prepare("SELECT * FROM customer_sessions WHERE token = ?").get(token);
+  const row = await db.prepare("SELECT * FROM customer_sessions WHERE token = ?").get(token);
   if (!row || Date.parse(row.expires_at) < Date.now()) return null;
-  return db.prepare("SELECT id, email, name, created_at FROM customers WHERE id = ?").get(row.customer_id) || null;
+  return (await db.prepare("SELECT id, email, name, created_at FROM customers WHERE id = ?").get(row.customer_id)) || null;
 }
 
 export function bearerToken(req) {
@@ -80,8 +80,8 @@ export function bearerToken(req) {
   return m ? m[1] : null;
 }
 
-export function requireAdmin(req, res, next) {
-  if (!validAdminSession(bearerToken(req))) {
+export async function requireAdmin(req, res, next) {
+  if (!(await validAdminSession(bearerToken(req)))) {
     return res.status(401).json({ error: "UNAUTHORIZED", message: "Admin sign-in required." });
   }
   next();

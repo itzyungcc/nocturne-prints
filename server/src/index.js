@@ -41,7 +41,7 @@ app.get("*", (req, res, next) => {
 // content is marked demo=1 everywhere; set SEED_DEMO_DATA=0 to disable.
 if (process.env.SEED_DEMO_DATA !== "0") {
   try {
-    if (seedIfEmpty()) console.log("catalog empty on boot — seeded demo catalog (SEED_DEMO_DATA=0 to disable)");
+    if (await seedIfEmpty()) console.log("catalog empty on boot — seeded demo catalog (SEED_DEMO_DATA=0 to disable)");
   } catch (e) { console.warn("boot seed skipped:", e.message); }
 }
 
