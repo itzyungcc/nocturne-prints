@@ -1,0 +1,1 @@
+{"dependencies":{"express":"^4.21.2"},"name":"nocturne-prints-server","scripts":{"seed":"node src/db/seed.js","start":"node src/index.js","test":"node test/store.test.js"},"type":"module","version":"1.0.0"}

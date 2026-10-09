@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: nocturne-prints
+    runtime: node
+    plan: free
+    buildCommand: cd web && npm install && npm run build && cd ../server && npm install
+    startCommand: cd server && npm start
+    envVars:
+      - key: ADMIN_PASSWORD
+        generateValue: true
+      - key: DB_PATH
+        value: /opt/render/project/src/server/data/nocturne.db
+    disk:
+      name: nocturne-data
+      mountPath: /opt/render/project/src/server/data
+      sizeGB: 1
