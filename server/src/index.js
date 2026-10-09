@@ -1,7 +1,7 @@
 // Nocturne Prints API server.
 import express from "express";
 import path from "node:path";
-import "./db/database.js";
+import { db } from "./db/database.js";
 import { shop } from "./routes/shop.js";
 import { checkout } from "./routes/checkout.js";
 import { customer } from "./routes/customer.js";
@@ -34,6 +34,19 @@ app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api")) return next();
   res.sendFile(path.join(webDist, "index.html"), (err) => err && next());
 });
+
+// Auto-seed the demo catalog on first boot when the database is empty
+// (fresh deploy: Render disk starts empty). The seed content is marked
+// demo=1 everywhere; set SEED_DEMO_DATA=0 to disable.
+if (process.env.SEED_DEMO_DATA !== "0") {
+  try {
+    const n = db.prepare("SELECT COUNT(*) c FROM products").get().c;
+    if (n === 0) {
+      console.log("catalog empty on boot — seeding demo data (SEED_DEMO_DATA=0 to disable)");
+      await import("./db/seed.js");
+    }
+  } catch (e) { console.warn("boot seed skipped:", e.message); }
+}
 
 const port = process.env.PORT || 4000;
 app.listen(port, () => console.log(`nocturne-prints API on :${port}`));
