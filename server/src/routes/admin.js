@@ -121,15 +121,82 @@ admin.delete("/products/:id/images/:imageId", async (req, res) => {
 
 // --- Collections ---
 admin.get("/collections", async (req, res) => {
-  res.json(await db.prepare("SELECT * FROM collections ORDER BY sort_order").all());
+  const rows = await db.prepare("SELECT * FROM collections ORDER BY sort_order").all();
+  res.json(await Promise.all(rows.map(async (c) => ({
+    ...c,
+    productCount: (await db.prepare("SELECT COUNT(*) n FROM products WHERE collection_id = ?").get(c.id)).n,
+  }))));
 });
 admin.post("/collections", async (req, res) => {
   const { title, slug, description } = req.body || {};
-  if (!title || !slug) return res.status(422).json({ error: "INVALID" });
+  if (!title || !slug) return res.status(422).json({ error: "INVALID", message: "Title and slug are required." });
   const id = crypto.randomUUID();
-  await db.prepare("INSERT INTO collections (id, title, slug, description, creator_id, sort_order) VALUES (?, ?, ?, ?, 'aoki', 99)")
-    .run(id, title, slug, description || "");
+  try {
+    await db.prepare("INSERT INTO collections (id, title, slug, description, creator_id, sort_order) VALUES (?, ?, ?, ?, 'aoki', 99)")
+      .run(id, title, slug, description || "");
+  } catch (e) {
+    return res.status(409).json({ error: "SLUG_TAKEN", message: "That slug is already used." });
+  }
   res.status(201).json({ id });
+});
+admin.put("/collections/:id", async (req, res) => {
+  const { title, description, sort_order } = req.body || {};
+  const c = await db.prepare("SELECT id FROM collections WHERE id = ?").get(req.params.id);
+  if (!c) return res.status(404).json({ error: "NOT_FOUND" });
+  await db.prepare("UPDATE collections SET title = ?, description = ?, sort_order = ? WHERE id = ?")
+    .run(title || "", description || "", parseInt(sort_order, 10) || 0, req.params.id);
+  res.json({ ok: true });
+});
+admin.delete("/collections/:id", async (req, res) => {
+  const n = (await db.prepare("SELECT COUNT(*) n FROM products WHERE collection_id = ?").get(req.params.id)).n;
+  if (n > 0)
+    return res.status(409).json({ error: "HAS_PRODUCTS", message: `${n} product(s) still use this collection. Move them first.` });
+  await db.prepare("DELETE FROM collections WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
+
+// --- Discount codes ---
+admin.get("/discounts", async (req, res) => {
+  res.json(await db.prepare("SELECT code, percent_off, active FROM discount_codes ORDER BY code").all());
+});
+admin.post("/discounts", async (req, res) => {
+  const code = String(req.body?.code || "").toUpperCase().trim();
+  const percent = parseInt(req.body?.percent_off, 10);
+  if (!/^[A-Z0-9_-]{3,24}$/.test(code))
+    return res.status(422).json({ error: "INVALID", message: "Code must be 3–24 characters (letters, numbers, - or _)." });
+  if (!Number.isInteger(percent) || percent < 1 || percent > 100)
+    return res.status(422).json({ error: "INVALID", message: "Percent off must be between 1 and 100." });
+  try {
+    await db.prepare("INSERT INTO discount_codes (code, percent_off, active) VALUES (?, ?, ?)")
+      .run(code, percent, req.body?.active === false ? 0 : 1);
+  } catch (e) {
+    return res.status(409).json({ error: "CODE_TAKEN", message: "That code already exists." });
+  }
+  res.status(201).json({ code });
+});
+admin.put("/discounts/:code", async (req, res) => {
+  const code = String(req.params.code).toUpperCase();
+  const percent = parseInt(req.body?.percent_off, 10);
+  if (!Number.isInteger(percent) || percent < 1 || percent > 100)
+    return res.status(422).json({ error: "INVALID", message: "Percent off must be between 1 and 100." });
+  const r = await db.prepare("UPDATE discount_codes SET percent_off = ?, active = ? WHERE code = ?")
+    .run(percent, req.body?.active === false ? 0 : 1, code);
+  res.json({ ok: true });
+});
+admin.delete("/discounts/:code", async (req, res) => {
+  await db.prepare("DELETE FROM discount_codes WHERE code = ?").run(String(req.params.code).toUpperCase());
+  res.json({ ok: true });
+});
+
+// --- Customers (read-only) ---
+admin.get("/customers", async (req, res) => {
+  const rows = await db.prepare(
+    "SELECT id, email, name, created_at FROM customers ORDER BY created_at DESC LIMIT 200"
+  ).all();
+  res.json(await Promise.all(rows.map(async (c) => ({
+    ...c,
+    orders: (await db.prepare("SELECT COUNT(*) n FROM orders WHERE customer_id = ?").get(c.id)).n,
+  }))));
 });
 
 // --- Orders ---

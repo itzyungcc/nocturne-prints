@@ -254,6 +254,144 @@ function Settings() {
   );
 }
 
+function Collections() {
+  const [list, setList] = useState([]);
+  const [title, setTitle] = useState("");
+  const [slug, setSlug] = useState("");
+  const [desc, setDesc] = useState("");
+  const [err, setErr] = useState("");
+  const [editing, setEditing] = useState(null);
+  const load = () => adminApi.collections().then(setList).catch(() => {});
+  useEffect(load, []);
+  const create = async () => {
+    setErr("");
+    try {
+      await adminApi.addCollection({ title, slug, description: desc });
+      setTitle(""); setSlug(""); setDesc(""); load();
+    } catch (e) { setErr(e.message); }
+  };
+  const saveEdit = async () => {
+    setErr("");
+    try { await adminApi.saveCollection(editing.id, editing); setEditing(null); load(); }
+    catch (e) { setErr(e.message); }
+  };
+  const remove = async (c) => {
+    if (!confirm(`Delete collection "${c.title}"?`)) return;
+    setErr("");
+    try { await adminApi.deleteCollection(c.id); load(); }
+    catch (e) { setErr(e.message); }
+  };
+  return (
+    <>
+      <h3 style={{ marginTop: 0 }}>Collections</h3>
+      {err && <div className="alert error">{err}</div>}
+      <div className="table-wrap"><table className="data">
+        <thead><tr><th>Title</th><th>Slug</th><th>Products</th><th /></tr></thead>
+        <tbody>{list.map((c) => (
+          <tr key={c.id}>
+            <td>{c.title}</td><td>{c.slug}</td><td>{c.productCount}</td>
+            <td style={{ whiteSpace: "nowrap" }}>
+              <button className="link-btn" onClick={() => setEditing({ ...c })}>Edit</button>
+              <button className="link-btn" onClick={() => remove(c)}>Delete</button>
+            </td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+      {editing && (
+        <div className="modal-backdrop" onClick={() => setEditing(null)}>
+          <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Edit collection</h3>
+            <div className="field"><label>Title</label>
+              <input value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} /></div>
+            <div className="field"><label>Description</label>
+              <textarea rows="2" value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} /></div>
+            <div className="field"><label>Sort order</label>
+              <input type="number" value={editing.sort_order} onChange={(e) => setEditing({ ...editing, sort_order: e.target.value })} /></div>
+            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+              <button className="btn" onClick={saveEdit}>Save</button>
+              <button className="btn ghost" onClick={() => setEditing(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <h4 style={{ marginTop: 22 }}>New collection</h4>
+      <div className="form-grid">
+        <div className="field"><label>Title</label><input value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+        <div className="field"><label>Slug</label><input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="my-collection" /></div>
+      </div>
+      <div className="field"><label>Description</label>
+        <textarea rows="2" value={desc} onChange={(e) => setDesc(e.target.value)} /></div>
+      <button className="btn" onClick={create} style={{ marginTop: 10 }}>Add collection</button>
+    </>
+  );
+}
+
+function Discounts() {
+  const [list, setList] = useState([]);
+  const [code, setCode] = useState("");
+  const [pct, setPct] = useState(10);
+  const [err, setErr] = useState("");
+  const load = () => adminApi.discounts().then(setList).catch(() => {});
+  useEffect(load, []);
+  const create = async () => {
+    setErr("");
+    try { await adminApi.addDiscount({ code, percent_off: parseInt(pct, 10), active: true }); setCode(""); setPct(10); load(); }
+    catch (e) { setErr(e.message); }
+  };
+  const toggle = async (d) => {
+    try { await adminApi.saveDiscount(d.code, { percent_off: d.percent_off, active: !d.active }); load(); }
+    catch (e) { setErr(e.message); }
+  };
+  const remove = async (d) => {
+    if (!confirm(`Delete code "${d.code}"?`)) return;
+    try { await adminApi.deleteDiscount(d.code); load(); }
+    catch (e) { setErr(e.message); }
+  };
+  return (
+    <>
+      <h3 style={{ marginTop: 0 }}>Discount codes</h3>
+      {err && <div className="alert error">{err}</div>}
+      <div className="table-wrap"><table className="data">
+        <thead><tr><th>Code</th><th>Off</th><th>Active</th><th /></tr></thead>
+        <tbody>{list.map((d) => (
+          <tr key={d.code}>
+            <td><code>{d.code}</code></td><td>{d.percent_off}%</td>
+            <td><button className="link-btn" onClick={() => toggle(d)}>{d.active ? "Yes" : "No"}</button></td>
+            <td><button className="link-btn" onClick={() => remove(d)}>Delete</button></td>
+          </tr>
+        ))}</tbody>
+      </table></div>
+      <h4 style={{ marginTop: 22 }}>New code</h4>
+      <div className="form-grid" style={{ gridTemplateColumns: "1fr 1fr auto", alignItems: "end" }}>
+        <div className="field"><label>Code</label><input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="SUMMER20" /></div>
+        <div className="field"><label>Percent off</label><input type="number" min="1" max="100" value={pct} onChange={(e) => setPct(e.target.value)} /></div>
+        <div className="field"><label>&nbsp;</label><button className="btn" onClick={create}>Add code</button></div>
+      </div>
+    </>
+  );
+}
+
+function Customers() {
+  const [list, setList] = useState([]);
+  useEffect(() => { adminApi.customers().then(setList).catch(() => {}); }, []);
+  return (
+    <>
+      <h3 style={{ marginTop: 0 }}>Customers</h3>
+      {list.length === 0 ? <p style={{ color: "var(--muted)" }}>No customer accounts yet.</p> : (
+        <div className="table-wrap"><table className="data">
+          <thead><tr><th>Name</th><th>Email</th><th>Joined</th><th>Orders</th></tr></thead>
+          <tbody>{list.map((c) => (
+            <tr key={c.id}>
+              <td>{c.name || "—"}</td><td>{c.email}</td>
+              <td>{new Date(c.created_at).toLocaleDateString()}</td><td>{c.orders}</td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+      )}
+    </>
+  );
+}
+
 export function AdminPage() {
   const { token, login, logout } = useAdmin();
   const [password, setPassword] = useState("");
@@ -286,6 +424,9 @@ export function AdminPage() {
       <nav className="admin-nav" aria-label="Admin">
         <NavLink to="/admin" end className={({ isActive }) => isActive ? "active" : ""}>Overview</NavLink>
         <NavLink to="/admin/products" className={({ isActive }) => isActive ? "active" : ""}>Products</NavLink>
+        <NavLink to="/admin/collections" className={({ isActive }) => isActive ? "active" : ""}>Collections</NavLink>
+        <NavLink to="/admin/discounts" className={({ isActive }) => isActive ? "active" : ""}>Discounts</NavLink>
+        <NavLink to="/admin/customers" className={({ isActive }) => isActive ? "active" : ""}>Customers</NavLink>
         <NavLink to="/admin/orders" className={({ isActive }) => isActive ? "active" : ""}>Orders</NavLink>
         <NavLink to="/admin/settings" className={({ isActive }) => isActive ? "active" : ""}>Settings</NavLink>
         <button className="link-btn" style={{ textAlign: "left" }} onClick={() => { logout(); nav("/"); }}>Sign out</button>
@@ -294,6 +435,9 @@ export function AdminPage() {
         <Routes>
           <Route index element={<Overview />} />
           <Route path="products" element={<Products />} />
+          <Route path="collections" element={<Collections />} />
+          <Route path="discounts" element={<Discounts />} />
+          <Route path="customers" element={<Customers />} />
           <Route path="orders" element={<Orders />} />
           <Route path="settings" element={<Settings />} />
         </Routes>
