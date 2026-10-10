@@ -52,8 +52,17 @@ function ProductEditor({ product, collections, onDone, onCancel }) {
   const [pending, setPending] = useState([]); // Files chosen before the product is saved
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [slugTouched, setSlugTouched] = useState(!!product?.slug);
   const fileRef = useRef(null);
-  const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+  const set = (k) => (e) => {
+    if (k === "slug") setSlugTouched(true);
+    if (k === "title" && !product?.id && !slugTouched) {
+      const auto = e.target.value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      setF((prev) => ({ ...prev, title: e.target.value, slug: auto }));
+      return;
+    }
+    setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+  };
   const setV = (i, k) => (e) => setVariants(variants.map((v, j) => j === i ? { ...v, [k]: e.target.value } : v));
   const save = async () => {
     setErr(""); setSaving(true);
@@ -115,7 +124,8 @@ function ProductEditor({ product, collections, onDone, onCancel }) {
         {err && <div className="alert error">{err}</div>}
         <div className="form-grid">
           <div className="field"><label>Title</label><input value={f.title} onChange={set("title")} /></div>
-          <div className="field"><label>Slug</label><input value={f.slug} onChange={set("slug")} placeholder="my-product" /></div>
+          <div className="field"><label>Slug</label><input value={f.slug} onChange={set("slug")} placeholder="my-product" />
+            <span style={{ fontSize: ".78rem", color: "var(--muted)" }}>Must be unique — used in the product's URL.</span></div>
         </div>
         <div className="form-grid">
           <div className="field"><label>Collection</label>

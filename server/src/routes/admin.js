@@ -54,14 +54,20 @@ async function upsertProduct(body, id) {
   const { slug, title, collection_id, description, specs, art_seed, palette, status, featured, is_sale, variants } = body;
   if (!title || !slug) throw Object.assign(new Error("title and slug required"), { status: 422 });
   const pid = id || crypto.randomUUID();
-  await db.prepare(
-    `INSERT INTO products (id, slug, title, creator_id, collection_id, description, specs, art_seed, palette, status, featured, is_sale, created_at, demo)
-     VALUES (?, ?, ?, 'aoki', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-     ON CONFLICT(id) DO UPDATE SET slug=excluded.slug, title=excluded.title, collection_id=excluded.collection_id,
-       description=excluded.description, specs=excluded.specs, art_seed=excluded.art_seed, palette=excluded.palette,
-       status=excluded.status, featured=excluded.featured, is_sale=excluded.is_sale`
-  ).run(pid, slug, title, collection_id || null, description || "", specs || "", art_seed || slug, palette || "nocturne",
-    status || "active", featured ? 1 : 0, is_sale ? 1 : 0, new Date().toISOString());
+  try {
+    await db.prepare(
+      `INSERT INTO products (id, slug, title, creator_id, collection_id, description, specs, art_seed, palette, status, featured, is_sale, created_at, demo)
+       VALUES (?, ?, ?, 'aoki', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+       ON CONFLICT(id) DO UPDATE SET slug=excluded.slug, title=excluded.title, collection_id=excluded.collection_id,
+         description=excluded.description, specs=excluded.specs, art_seed=excluded.art_seed, palette=excluded.palette,
+         status=excluded.status, featured=excluded.featured, is_sale=excluded.is_sale`
+    ).run(pid, slug, title, collection_id || null, description || "", specs || "", art_seed || slug, palette || "nocturne",
+      status || "active", featured ? 1 : 0, is_sale ? 1 : 0, new Date().toISOString());
+  } catch (e) {
+    if (/unique|duplicate/i.test(e.message || ""))
+      throw Object.assign(new Error(`The URL slug "${slug}" is already used by another product. Change the slug and save again.`), { status: 409 });
+    throw e;
+  }
   await db.prepare("DELETE FROM variants WHERE product_id = ?").run(pid);
   for (let i = 0; i < (variants || []).length; i++) {
     const v = variants[i];
