@@ -34,6 +34,23 @@ export const adminApi = {
   orderStatus: (id, status) => api.post(`/api/admin/orders/${id}/status`, { status }),
   settings: () => api.get("/api/admin/settings"),
   saveSettings: (s) => api.put("/api/admin/settings", s),
+  uploadImage: async (productId, file) => {
+    const token = localStorage.getItem("ncp_admin");
+    const res = await fetch(`/api/admin/products/${productId}/images`, {
+      method: "POST",
+      headers: { "Content-Type": file.type, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: file,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(data.message || data.error || `Upload failed (${res.status})`);
+      err.code = data.error; err.status = res.status;
+      throw err;
+    }
+    return data;
+  },
+  deleteImage: (productId, imageId) =>
+    req(`/api/admin/products/${productId}/images/${imageId}`, { method: "DELETE" }),
 };
 
 export function money(cents) {

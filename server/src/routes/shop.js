@@ -11,6 +11,10 @@ async function productWithVariants(row) {
     .prepare("SELECT id, name, sku, price_cents, compare_at_cents, stock FROM variants WHERE product_id = ? ORDER BY sort_order")
     .all(row.id))
     .map((v) => ({ ...v, price: money(v.price_cents), compareAt: money(v.compare_at_cents) }));
+  const images = (await db
+    .prepare("SELECT id, mime FROM product_images WHERE product_id = ? ORDER BY sort_order")
+    .all(row.id))
+    .map((i) => ({ id: i.id, mime: i.mime, url: `/api/images/${i.id}` }));
   const prices = variants.map((v) => v.price_cents);
   const min = Math.min(...prices);
   const max = Math.max(...prices);
@@ -32,6 +36,7 @@ async function productWithVariants(row) {
     demo: Boolean(row.demo),
     createdAt: row.created_at,
     variants,
+    images,
     priceMin: money(min),
     priceMax: money(max),
     singlePrice: min === max,
@@ -60,11 +65,19 @@ shop.get("/collections", async (req, res) => {
   res.json(withCounts);
 });
 
-shop.get("/collections/:slug", async (req, res) => {
-  const c = await db.prepare("SELECT * FROM collections WHERE slug = ?").get(req.params.slug);
+shop.get("/collections/:slug", async (req, res) => {  const c = await db.prepare("SELECT * FROM collections WHERE slug = ?").get(req.params.slug);
   if (!c) return res.status(404).json({ error: "NOT_FOUND" });
   const creator = await db.prepare("SELECT * FROM creators WHERE id = ?").get(c.creator_id);
   res.json({ ...c, creator: { id: creator.id, name: creator.name, bio: creator.bio, avatarSeed: creator.avatar_seed, twitter: creator.twitter, instagram: creator.instagram } });
+});
+
+// Public product image bytes (uploaded in admin; stored in the database).
+shop.get("/images/:id", async (req, res) => {
+  const row = await db.prepare("SELECT mime, data FROM product_images WHERE id = ?").get(req.params.id);
+  if (!row) return res.status(404).json({ error: "NOT_FOUND" });
+  res.setHeader("Content-Type", row.mime);
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  res.send(Buffer.from(row.data)); // node:sqlite returns Uint8Array; pg returns Buffer
 });
 
 // GET /api/products?collection=&q=&sort=&availability=&page=&perPage=

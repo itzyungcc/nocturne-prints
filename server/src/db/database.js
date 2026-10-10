@@ -155,6 +155,15 @@ CREATE TABLE IF NOT EXISTS discount_codes (
   percent_off INTEGER NOT NULL,
   active INTEGER NOT NULL DEFAULT 1
 );
+CREATE TABLE IF NOT EXISTS product_images (
+  id TEXT PRIMARY KEY,
+  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  mime TEXT NOT NULL,
+  data BYTEA NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_product_images_product ON product_images(product_id);
 `);
 
 export { prepare, exec };

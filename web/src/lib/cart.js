@@ -21,6 +21,7 @@ export function addToCart(product, variant, quantity = 1) {
     title: product.title, variantName: variant.name,
     priceCents: variant.price_cents, compareAtCents: variant.compare_at_cents,
     artSeed: product.artSeed, palette: product.palette,
+    imageUrl: product.images && product.images.length ? product.images[0].url : null,
     quantity: Math.min(99, quantity),
   });
   save();

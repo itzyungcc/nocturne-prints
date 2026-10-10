@@ -4,17 +4,23 @@ import { artSVG } from "../lib/art";
 import { money, priceRange } from "../lib/api";
 import { addToCart } from "../lib/cart";
 
-export function ProductArt({ seed, palette, variant = 0, alt = "", eager = false }) {
+export function ProductArt({ seed, palette, variant = 0, alt = "", eager = false, src }) {
   const [loaded, setLoaded] = useState(false);
+  const url = src || artSVG(seed, palette, variant);
   return (
     <img
-      src={artSVG(seed, palette, variant)}
+      src={url}
       alt={alt}
       loading={eager ? "eager" : "lazy"}
       onLoad={() => setLoaded(true)}
       style={{ opacity: loaded ? 1 : 0, transition: "opacity .3s" }}
     />
   );
+}
+
+// First uploaded photo wins; falls back to generative art.
+export function productImage(p) {
+  return p.images && p.images.length ? p.images[0].url : null;
 }
 
 function badgeFor(p) {
@@ -34,7 +40,7 @@ export function ProductCard({ product, onQuickShop }) {
     <article className="card">
       <div className="card-media">
         <Link to={`/products/${product.slug}`} aria-label={product.title} tabIndex={-1}>
-          <ProductArt seed={product.artSeed} palette={product.palette} alt="" />
+          <ProductArt seed={product.artSeed} palette={product.palette} src={productImage(product)} alt="" />
         </Link>
         {badgeFor(product)}
         {product.inStock && product.status === "active" && (
@@ -71,7 +77,7 @@ export function QuickShopModal({ product, onClose, notify }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" role="dialog" aria-modal="true" aria-label={`Quick shop ${product.title}`} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", gap: 16 }}>
-          <div style={{ width: 110, flexShrink: 0 }}><ProductArt seed={product.artSeed} palette={product.palette} alt="" eager /></div>
+          <div style={{ width: 110, flexShrink: 0 }}><ProductArt seed={product.artSeed} palette={product.palette} src={productImage(product)} alt="" eager /></div>
           <div>
             <h3 style={{ margin: "0 0 4px" }}>{product.title}</h3>
             <div className="card-price">{variant ? money(variant.price_cents) : priceRange(product)}</div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Route, Routes, useNavigate } from "react-router-dom";
 import { adminApi, api, money } from "../lib/api";
 
@@ -48,6 +48,9 @@ function ProductEditor({ product, collections, onDone, onCancel }) {
     [{ name: "Standard", sku: "", price_cents: 1500, compare_at_cents: "", stock: 10 }]
   );
   const [err, setErr] = useState("");
+  const [images, setImages] = useState(product?.images || []);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
   const setV = (i, k) => (e) => setVariants(variants.map((v, j) => j === i ? { ...v, [k]: e.target.value } : v));
   const save = async () => {
@@ -64,6 +67,24 @@ function ProductEditor({ product, collections, onDone, onCancel }) {
       }, product?.id);
       onDone();
     } catch (e) { setErr(e.message); }
+  };
+  const upload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !product?.id) return;
+    setErr(""); setUploading(true);
+    try {
+      const r = await adminApi.uploadImage(product.id, file);
+      setImages([...images, r]);
+    } catch (ex) { setErr(ex.message); }
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+  const removeImage = async (imageId) => {
+    if (!confirm("Delete this image?")) return;
+    try {
+      await adminApi.deleteImage(product.id, imageId);
+      setImages(images.filter((i) => i.id !== imageId));
+    } catch (ex) { setErr(ex.message); }
   };
   return (
     <div className="modal-backdrop" onClick={onCancel}>
@@ -98,6 +119,28 @@ function ProductEditor({ product, collections, onDone, onCancel }) {
           <label><input type="checkbox" checked={f.featured} onChange={set("featured")} /> Featured</label>
           <label><input type="checkbox" checked={f.is_sale} onChange={set("is_sale")} /> On sale</label>
         </div>
+        <h4>Product images</h4>
+        {product?.id ? (
+          <>
+            <p style={{ color: "var(--muted)", fontSize: ".85rem", margin: "0 0 8px" }}>
+              Uploaded photos replace the generative artwork on the storefront. JPEG, PNG or WebP, max 3&nbsp;MB each.
+            </p>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+              {images.map((i) => (
+                <div key={i.id} style={{ position: "relative", width: 96 }}>
+                  <img src={i.url} alt="" style={{ width: 96, height: 120, objectFit: "cover", borderRadius: 8, display: "block" }} />
+                  <button className="btn ghost small" aria-label="Delete image"
+                    onClick={() => removeImage(i.id)}
+                    style={{ position: "absolute", top: 4, right: 4, padding: "2px 8px" }}>✕</button>
+                </div>
+              ))}
+            </div>
+            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={upload} disabled={uploading} />
+            {uploading && <p style={{ color: "var(--muted)" }}>Uploading…</p>}
+          </>
+        ) : (
+          <p style={{ color: "var(--muted)", fontSize: ".85rem" }}>Save the product first, then you can upload photos for it.</p>
+        )}
         <h4>Variants (prices in cents)</h4>
         {variants.map((v, i) => (
           <div key={i} className="form-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr auto" }}>

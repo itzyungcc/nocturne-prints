@@ -26,7 +26,10 @@ export function ProductPage({ notify, onQuickShop }) {
 
   const variant = p.variants.find((v) => v.id === variantId);
   const soldOut = p.status !== "active" || !p.variants.some((v) => v.stock > 0);
-  const gallery = [0, 1, 2];
+  // Uploaded photos become the gallery; otherwise the three generative art views.
+  const slides = p.images && p.images.length
+    ? p.images.map((i) => ({ type: "img", url: i.url }))
+    : [0, 1, 2].map((g) => ({ type: "art", variant: g }));
 
   const add = () => {
     if (!variant || variant.stock < qty) return;
@@ -42,16 +45,20 @@ export function ProductPage({ notify, onQuickShop }) {
       <div className="product-layout">
         <div>
           <div className="gallery-main">
-            <ProductArt seed={p.artSeed} palette={p.palette} variant={gallery[img]} alt={p.title} eager />
+            {slides[img].type === "img"
+              ? <ProductArt src={slides[img].url} alt={p.title} eager />
+              : <ProductArt seed={p.artSeed} palette={p.palette} variant={slides[img].variant} alt={p.title} eager />}
           </div>
           <div className="thumbs" role="tablist" aria-label="Product images">
-            {gallery.map((g) => (
-              <button key={g} role="tab" aria-selected={img === g} aria-label={`View image ${g + 1}`} onClick={() => setImg(g)}>
-                <ProductArt seed={p.artSeed} palette={p.palette} variant={g} alt="" />
+            {slides.map((s, i) => (
+              <button key={i} role="tab" aria-selected={img === i} aria-label={`View image ${i + 1}`} onClick={() => setImg(i)}>
+                {s.type === "img"
+                  ? <ProductArt src={s.url} alt="" />
+                  : <ProductArt seed={p.artSeed} palette={p.palette} variant={s.variant} alt="" />}
               </button>
             ))}
           </div>
-          {p.demo && <p className="demo-note" style={{ marginTop: 10 }}>Demo artwork: original generative placeholder. Final products ship with the artist's authorized images.</p>}
+          {p.demo && !p.images?.length && <p className="demo-note" style={{ marginTop: 10 }}>Demo artwork: original generative placeholder. Final products ship with the artist's authorized images.</p>}
         </div>
         <div className="product-info">
           {p.isSale && <span className="badge sale" style={{ position: "static" }}>Sale</span>}

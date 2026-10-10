@@ -1,6 +1,7 @@
 // Admin API. All routes (except login) require a valid admin session.
 // Password comes from ADMIN_PASSWORD env — never hardcoded, never in the repo.
 import { Router } from "express";
+import express from "express";
 import crypto from "node:crypto";
 import { db } from "../db/database.js";
 import {
@@ -44,6 +45,8 @@ admin.get("/products", async (req, res) => {
   res.json(await Promise.all(rows.map(async (p) => ({
     ...p,
     variants: await db.prepare("SELECT * FROM variants WHERE product_id = ? ORDER BY sort_order").all(p.id),
+    images: (await db.prepare("SELECT id, mime FROM product_images WHERE product_id = ? ORDER BY sort_order").all(p.id))
+      .map((i) => ({ id: i.id, mime: i.mime, url: `/api/images/${i.id}` })),
   }))));
 });
 
@@ -80,6 +83,39 @@ admin.put("/products/:id", async (req, res) => {
 });
 admin.post("/products/:id/archive", async (req, res) => {
   await db.prepare("UPDATE products SET status = 'archived' WHERE id = ?").run(req.params.id);
+  res.json({ ok: true });
+});
+
+// --- Product images (binary upload, stored in the database so they survive redeploys) ---
+const rawImage = express.raw({ type: "image/*", limit: 3 * 1024 * 1024 });
+const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+admin.post("/products/:id/images", rawImage, async (req, res) => {
+  try {
+    const p = await db.prepare("SELECT id FROM products WHERE id = ?").get(req.params.id);
+    if (!p) return res.status(404).json({ error: "NOT_FOUND", message: "Product not found." });
+    const mime = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+    if (!ALLOWED_MIME.has(mime))
+      return res.status(415).json({ error: "BAD_IMAGE", message: "Only JPEG, PNG or WebP images are accepted." });
+    if (!req.body || !req.body.length)
+      return res.status(422).json({ error: "EMPTY_IMAGE", message: "No image data received." });
+    const next = (await db.prepare("SELECT COALESCE(MAX(sort_order), -1) + 1 n FROM product_images WHERE product_id = ?")
+      .get(req.params.id)).n;
+    const id = crypto.randomUUID();
+    await db.prepare(
+      "INSERT INTO product_images (id, product_id, mime, data, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(id, req.params.id, mime, Buffer.from(req.body), next, new Date().toISOString());
+    res.status(201).json({ id, mime, url: `/api/images/${id}` });
+  } catch (e) {
+    if (e.type === "entity.too.large")
+      return res.status(413).json({ error: "TOO_LARGE", message: "Image must be under 3 MB." });
+    res.status(500).json({ error: "UPLOAD_FAILED", message: e.message });
+  }
+});
+
+admin.delete("/products/:id/images/:imageId", async (req, res) => {
+  await db.prepare("DELETE FROM product_images WHERE id = ? AND product_id = ?")
+    .run(req.params.imageId, req.params.id);
   res.json({ ok: true });
 });
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, money } from "../lib/api";
-import { ProductArt } from "../components/Product";
+import { ProductArt, productImage } from "../components/Product";
 import { useCart, setQty, removeFromCart, clearCart } from "../lib/cart";
 
 export function CheckoutPage({ settings, notify }) {
@@ -77,7 +77,7 @@ export function CheckoutPage({ settings, notify }) {
           <h3 style={{ marginTop: 0 }}>Order summary</h3>
           {items.map((i) => (
             <div className="cart-item" key={i.variantId}>
-              <ProductArt seed={i.artSeed} palette={i.palette} alt="" />
+              <ProductArt seed={i.artSeed} palette={i.palette} src={i.imageUrl || null} alt="" />
               <div className="meta">
                 <div className="t">{i.title}</div>
                 <div className="v">{i.variantName} × {i.quantity}</div>

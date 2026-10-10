@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ProductArt } from "./Product";
+import { ProductArt, productImage } from "./Product";
 import { money } from "../lib/api";
 import { useCart, setQty, removeFromCart } from "../lib/cart";
 
@@ -31,7 +31,7 @@ export function CartDrawer({ open, onClose, onCheckout }) {
           ) : items.map((i) => (
             <div className="cart-item" key={i.variantId}>
               <Link to={`/products/${i.slug}`} onClick={onClose}>
-                <ProductArt seed={i.artSeed} palette={i.palette} alt="" />
+                <ProductArt seed={i.artSeed} palette={i.palette} src={i.imageUrl || null} alt="" />
               </Link>
               <div className="meta">
                 <div className="t">{i.title}</div>
