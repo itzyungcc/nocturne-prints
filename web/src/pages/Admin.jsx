@@ -53,6 +53,7 @@ function ProductEditor({ product, collections, onDone, onCancel }) {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [slugTouched, setSlugTouched] = useState(!!product?.slug);
+  const [createdId, setCreatedId] = useState(null); // id of a just-created product, for safe retries
   const fileRef = useRef(null);
   const set = (k) => (e) => {
     if (k === "slug") setSlugTouched(true);
@@ -67,20 +68,35 @@ function ProductEditor({ product, collections, onDone, onCancel }) {
   const save = async () => {
     setErr(""); setSaving(true);
     try {
-      const r = await adminApi.saveProduct({
-        ...f,
-        variants: variants.map((v) => ({
-          name: v.name, sku: v.sku,
-          price_cents: Math.round(parseFloat(v.price_cents || 0) * 1),
-          compare_at_cents: v.compare_at_cents === "" ? null : Math.round(parseFloat(v.compare_at_cents) * 1),
-          stock: parseInt(v.stock || 0, 10),
-        })),
-      }, product?.id);
-      const pid = product?.id || r.id;
-      for (const file of pending) {
-        await adminApi.uploadImage(pid, file);
+      let pid = product?.id || createdId;
+      if (!pid) {
+        const r = await adminApi.saveProduct({
+          ...f,
+          variants: variants.map((v) => ({
+            name: v.name, sku: v.sku,
+            price_cents: Math.round(parseFloat(v.price_cents || 0) * 1),
+            compare_at_cents: v.compare_at_cents === "" ? null : Math.round(parseFloat(v.compare_at_cents) * 1),
+            stock: parseInt(v.stock || 0, 10),
+          })),
+        });
+        pid = r.id;
+        setCreatedId(pid);
+      } else {
+        await adminApi.saveProduct({
+          ...f,
+          variants: variants.map((v) => ({
+            name: v.name, sku: v.sku,
+            price_cents: Math.round(parseFloat(v.price_cents || 0) * 1),
+            compare_at_cents: v.compare_at_cents === "" ? null : Math.round(parseFloat(v.compare_at_cents) * 1),
+            stock: parseInt(v.stock || 0, 10),
+          })),
+        }, pid);
       }
-      pending.forEach((p) => URL.revokeObjectURL(p.preview));
+      for (const p of [...pending]) {
+        await adminApi.uploadImage(pid, p.file);
+        URL.revokeObjectURL(p.preview);
+        setPending((prev) => prev.filter((x) => x.preview !== p.preview));
+      }
       onDone();
     } catch (e) { setErr(e.message); }
     setSaving(false);
