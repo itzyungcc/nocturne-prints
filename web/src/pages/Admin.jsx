@@ -49,14 +49,16 @@ function ProductEditor({ product, collections, onDone, onCancel }) {
   );
   const [err, setErr] = useState("");
   const [images, setImages] = useState(product?.images || []);
+  const [pending, setPending] = useState([]); // Files chosen before the product is saved
   const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
   const setV = (i, k) => (e) => setVariants(variants.map((v, j) => j === i ? { ...v, [k]: e.target.value } : v));
   const save = async () => {
-    setErr("");
+    setErr(""); setSaving(true);
     try {
-      await adminApi.saveProduct({
+      const r = await adminApi.saveProduct({
         ...f,
         variants: variants.map((v) => ({
           name: v.name, sku: v.sku,
@@ -65,19 +67,39 @@ function ProductEditor({ product, collections, onDone, onCancel }) {
           stock: parseInt(v.stock || 0, 10),
         })),
       }, product?.id);
+      const pid = product?.id || r.id;
+      for (const file of pending) {
+        await adminApi.uploadImage(pid, file);
+      }
+      pending.forEach((p) => URL.revokeObjectURL(p.preview));
       onDone();
     } catch (e) { setErr(e.message); }
+    setSaving(false);
   };
-  const upload = async (e) => {
-    const file = e.target.files[0];
-    if (!file || !product?.id) return;
-    setErr(""); setUploading(true);
-    try {
-      const r = await adminApi.uploadImage(product.id, file);
-      setImages([...images, r]);
-    } catch (ex) { setErr(ex.message); }
-    setUploading(false);
+  const pick = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (product?.id) {
+      // Editing an existing product: upload straight away.
+      (async () => {
+        setErr(""); setUploading(true);
+        try {
+          for (const file of files) {
+            const r = await adminApi.uploadImage(product.id, file);
+            setImages((prev) => [...prev, r]);
+          }
+        } catch (ex) { setErr(ex.message); }
+        setUploading(false);
+      })();
+    } else {
+      // New product: stage the files; they upload when the product is saved.
+      setPending((prev) => [...prev, ...files.map((file) => ({ file, preview: URL.createObjectURL(file) }))]);
+    }
     if (fileRef.current) fileRef.current.value = "";
+  };
+  const dropPending = (preview) => {
+    URL.revokeObjectURL(preview);
+    setPending((prev) => prev.filter((p) => p.preview !== preview));
   };
   const removeImage = async (imageId) => {
     if (!confirm("Delete this image?")) return;
@@ -120,27 +142,31 @@ function ProductEditor({ product, collections, onDone, onCancel }) {
           <label><input type="checkbox" checked={f.is_sale} onChange={set("is_sale")} /> On sale</label>
         </div>
         <h4>Product images</h4>
-        {product?.id ? (
-          <>
-            <p style={{ color: "var(--muted)", fontSize: ".85rem", margin: "0 0 8px" }}>
-              Uploaded photos replace the generative artwork on the storefront. JPEG, PNG or WebP, max 3&nbsp;MB each.
-            </p>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-              {images.map((i) => (
-                <div key={i.id} style={{ position: "relative", width: 96 }}>
-                  <img src={i.url} alt="" style={{ width: 96, height: 120, objectFit: "cover", borderRadius: 8, display: "block" }} />
-                  <button className="btn ghost small" aria-label="Delete image"
-                    onClick={() => removeImage(i.id)}
-                    style={{ position: "absolute", top: 4, right: 4, padding: "2px 8px" }}>✕</button>
-                </div>
-              ))}
+        <p style={{ color: "var(--muted)", fontSize: ".85rem", margin: "0 0 8px" }}>
+          Uploaded photos replace the generative artwork on the storefront. JPEG, PNG or WebP, max 3&nbsp;MB each.
+          {!product?.id && " Photos you pick now upload automatically when you save the product."}
+        </p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+          {images.map((i) => (
+            <div key={i.id} style={{ position: "relative", width: 96 }}>
+              <img src={i.url} alt="" style={{ width: 96, height: 120, objectFit: "cover", borderRadius: 8, display: "block" }} />
+              <button className="btn ghost small" aria-label="Delete image"
+                onClick={() => removeImage(i.id)}
+                style={{ position: "absolute", top: 4, right: 4, padding: "2px 8px" }}>✕</button>
             </div>
-            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={upload} disabled={uploading} />
-            {uploading && <p style={{ color: "var(--muted)" }}>Uploading…</p>}
-          </>
-        ) : (
-          <p style={{ color: "var(--muted)", fontSize: ".85rem" }}>Save the product first, then you can upload photos for it.</p>
-        )}
+          ))}
+          {pending.map((p) => (
+            <div key={p.preview} style={{ position: "relative", width: 96 }}>
+              <img src={p.preview} alt="" style={{ width: 96, height: 120, objectFit: "cover", borderRadius: 8, display: "block", opacity: 0.85 }} />
+              <span style={{ position: "absolute", bottom: 4, left: 4, fontSize: ".7rem", background: "rgba(0,0,0,.6)", color: "#fff", padding: "1px 6px", borderRadius: 4 }}>pending</span>
+              <button className="btn ghost small" aria-label="Remove photo"
+                onClick={() => dropPending(p.preview)}
+                style={{ position: "absolute", top: 4, right: 4, padding: "2px 8px" }}>✕</button>
+            </div>
+          ))}
+        </div>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={pick} disabled={uploading || saving} />
+        {(uploading || saving) && <p style={{ color: "var(--muted)" }}>{saving ? "Saving product and uploading photos…" : "Uploading…"}</p>}
         <h4>Variants (prices in cents)</h4>
         {variants.map((v, i) => (
           <div key={i} className="form-grid" style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr auto" }}>
@@ -153,8 +179,8 @@ function ProductEditor({ product, collections, onDone, onCancel }) {
         ))}
         <button className="btn ghost small" onClick={() => setVariants([...variants, { name: "", sku: "", price_cents: 0, compare_at_cents: "", stock: 0 }])}>+ Add variant</button>
         <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
-          <button className="btn" onClick={save}>Save product</button>
-          <button className="btn ghost" onClick={onCancel}>Cancel</button>
+          <button className="btn" onClick={save} disabled={saving}>{saving ? "Saving…" : "Save product"}</button>
+          <button className="btn ghost" onClick={onCancel} disabled={saving}>Cancel</button>
         </div>
       </div>
     </div>
